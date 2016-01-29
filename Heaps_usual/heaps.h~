@@ -3,13 +3,11 @@
 #include <cmath>
 #include <iostream>
 #include <cassert>
-#include <memory>
 
 const int inf = 1e9;
 
 using std::cout;
 using std::endl;
-using std::unique_ptr;
 
 class IHeap
 {
@@ -220,216 +218,223 @@ public:
 	}
 };
 
-class SkewHeap;
-
-class SkewNode
-{
-private:
-	friend class SkewHeap;
-	int key;
-	unique_ptr<SkewNode> l;
-	unique_ptr<SkewNode> r;
-public:
-	SkewNode(int x)
-	{
-		key = x;
-		l = nullptr;
-		r = nullptr;
-	}
-};
-
-typedef unique_ptr<SkewNode> skewPtr;
-
-class SkewHeap:public IHeap 
+class LightHeap:public IHeap 
 {
 protected:
-    skewPtr root;
+    int key;
+    LightHeap *l;
+    LightHeap *r;
 public:
-    void balance(skewPtr &v)
-    {
-		assert(v != nullptr);
-		std::swap(v->l, v->r);
-	}
+    virtual void balance() = 0;
+    virtual int getRank() = 0;
  
-    SkewHeap()
+    LightHeap()
     {
-		root = nullptr;
+		key = -inf;
+		l = nullptr;
+		r = nullptr;
     }
     
-    SkewHeap(int val)
+    LightHeap(int val)
     {
-		root.reset(new SkewNode(val));
-	}
-    
-    bool isEmpty()
-    {
-		return (root == nullptr);
-	}
-	
-	int getMin()
-	{
-		return root->key;
-	}
-	
-	void merge(skewPtr &a, skewPtr &b)
-	{
-		if (a == nullptr)
-		{
-			a = std::move(b);
-			return;
-		}
-		if (b == nullptr)
-			return;
-		if (a->key > b->key)
-			std::swap(a, b);
-		if (a->r == nullptr)
-			std::swap(a->l, a->r);
-		balance(a);
-		if (a->r == nullptr)
-			a->r = move(b);
-		else
-			merge(a->r, b);
-	}
-	
-	void insert(int x)
-	{
-		skewPtr newNode(new SkewNode(x));
-		merge(root, newNode);
-	}
- 
-    int extractMin()
-    {
-		assert(root != nullptr);
-		int res = root->key;
-		merge(root->l, root->r);
-		root = move(root->l);
-		return res;
-    }
-    
-    void Meld(IHeap* h)
-    {
-		SkewHeap* lh = dynamic_cast<SkewHeap*>(h);
-		if (lh)
-		{
-			merge(root, lh->root);
-			delete lh;
-		}
-		else
-			stupidMeld(h);
-	}
-};
-
-class LeftHeap;
-
-class LeftNode
-{
-private:
-	friend class LeftHeap;
-	int key;
-	unique_ptr<LeftNode> l;
-	unique_ptr<LeftNode> r;
-	int rank;
-public:
-	LeftNode(int val)
-	{
 		key = val;
 		l = nullptr;
 		r = nullptr;
-		rank = 1;
-	}
-};
-
-typedef unique_ptr<LeftNode> leftPtr;
- 
-class LeftHeap: public IHeap
-{
-private:
-    leftPtr root;
-public:
-	int rk(leftPtr &v)
-	{
-		if (v == nullptr)
-			return 0;
-		return v->rank;
-	}
-	
-    void balance(leftPtr &v)
-    {
-		assert(v != nullptr);
-		if (rk(v->l) < rk(v->r))
-			std::swap(v->l, v->r);
-		v->rank = rk(v->l) + 1;
 	}
  
-    LeftHeap()
+    LightHeap(int val, LightHeap *left, LightHeap *right)
     {
-		root = nullptr;
+		key = val;
+		l = left;
+		r = right;
     }
-    
-    LeftHeap(int val)
+ 
+    virtual void copy(const LightHeap *a)
     {
-		root.reset(new LeftNode(val));
-	}
+		//unique_ptr<LightHeap> p;
+		if (a == nullptr)
+		{
+			key = -inf;
+			l = nullptr;
+			r = nullptr;
+			return;
+		}
+		assert(a->l != this);
+		assert(a->r != this);
+        key = a->key;
+        LightHeap* al = a->l;
+        LightHeap* ar = a->r;
+        l = al;
+        r = ar;
+        assert(l != this);
+        assert(r != this);
+        delete a;
+    }
     
     bool isEmpty()
     {
-		return (root == nullptr);
+		return (key == -inf);
 	}
 	
 	int getMin()
 	{
-		return root->key;
-	}
-	
-	void merge(leftPtr &a, leftPtr &b)
-	{
-		if (a == nullptr)
-		{
-			a = std::move(b);
-			return;
-		}
-		if (b == nullptr)
-			return;
-		if (a->key > b->key)
-			std::swap(a, b);
-		if (a->r == nullptr)
-			std::swap(a->l, a->r);
-		balance(a);
-		if (a->r == nullptr)
-			a->r = move(b);
-		else
-			merge(a->r, b);
-	}
-	
-	void insert(int x)
-	{
-		leftPtr newNode(new LeftNode(x));
-		merge(root, newNode);
-	}
-	
-	int depth()
-	{
-		return root->rank;
+		return key;
 	}
  
     int extractMin()
     {
-		assert(root != nullptr);
-		int res = root->key;
-		merge(root->l, root->r);
-		root = move(root->l);
-		return res;
+        int res = key;
+        if (res == -inf)
+            return -inf;
+        if ((l == nullptr) && (r == nullptr))
+		{
+			copy(l);
+			return res;
+		}
+        if (l != nullptr)
+            copy(l->Merge(r));
+        else if (r != nullptr)
+            copy(r->Merge(l));
+        return res;
+    }
+ 
+    LightHeap* Merge(LightHeap *h)
+    {
+        if ((this == nullptr) || isEmpty())
+			return h;
+		if ((h == nullptr) || (h->isEmpty()))
+			return this;
+        if (key <= h->key)
+        {
+			if (r == nullptr)
+				std::swap(l, r);
+			if (r == nullptr)
+				r = h;
+			else
+				r = r->Merge(h);
+			balance();
+			return this;
+		}
+        else 
+        {
+            h->l = Merge(h->l);
+            h->balance();
+            return h;
+        }
     }
     
     void Meld(IHeap* h)
     {
-		LeftHeap* lh = dynamic_cast<LeftHeap*>(h);
+		LightHeap* lh = dynamic_cast<LightHeap*>(h);
 		if (lh)
 		{
-			merge(root, lh->root);
-			delete lh;
+			LightHeap* newHeap = Merge(lh);
+			copy(newHeap);
 		}
 		else
 			stupidMeld(h);
 	}
+};
+ 
+class SkewHeap: public LightHeap 
+{
+public:
+    SkewHeap():LightHeap()
+    {
+	}
+	
+	SkewHeap(int val):LightHeap(val)
+	{
+	}
+    
+    SkewHeap(int val, LightHeap *left, LightHeap *right):LightHeap(val, left, right)
+    {
+	}
+ 
+    int getRank() 
+    {
+        return 0;
+    }
+ 
+    void balance() 
+    {
+        std::swap(l, r);
+    }
+ 
+    void Meld(SkewHeap* &a) 
+    {
+        SkewHeap *newHeap = new SkewHeap;
+        newHeap->copy(this);
+        copy(newHeap->Merge(a));
+    }
+ 
+    void insert(int key) 
+    {
+        SkewHeap *newHeap = new SkewHeap(key);
+        Meld(newHeap);
+    }
+};
+ 
+class LeftHeap:public LightHeap 
+{
+private:
+    int rank;
+public:
+    LeftHeap():LightHeap()
+    {
+		rank = 0;
+	}
+	
+	LeftHeap(int val)
+	{
+		rank = 1;
+		key = val;
+		l = nullptr;
+		r = nullptr;
+	}
+ 
+    LeftHeap(int rk, int val, LightHeap *left, LightHeap *right):LightHeap(val, left, right)
+    {
+		rank = rk;
+	}
+	
+	void copy(LeftHeap* h)
+	{
+		if (h == nullptr)
+			rank = 0;
+		else
+			rank = h->rank;
+	}
+	
+	int getRank()
+	{
+		return rank;
+	}
+ 
+    int rk(LightHeap* h)
+    {
+		if (h == nullptr)
+			return 0;
+		return h->getRank();
+	}
+ 
+    void balance() 
+    {
+        if (rk(r) < rk(l))
+            std::swap(l, r);
+        rank = rk(l) + 1;
+    }
+    
+    void Meld(LeftHeap* &a)
+    {
+        LeftHeap *newHeap = new LeftHeap;
+        newHeap->copy(this);
+        copy(newHeap->Merge(a));
+    }
+ 
+    void insert(int key) 
+    {
+        LeftHeap *newHeap = new LeftHeap(key);
+        Meld(newHeap);
+    }
 };
